@@ -1,0 +1,228 @@
+---
+title: 'Bradford road traffic accidents'
+author: "Dobgima Mofor"
+#date: "2023-11-29"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    number_sections: yes
+    self_contained: yes
+    toc: yes
+    toc_float: yes
+---
+
+```{r, results='hide', message=FALSE, warning=FALSE, echo=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+library(tidyverse)
+library(flextable)
+
+options(shiny.usecairo=T)
+setalloccol = data.table::setalloccol
+```
+
+## Road traffic accidents in Bradford
+
+**Task**
+The Director of Neighbourhoods wants to understand more about road traffic crashes in Bradford.  You, the HDRC data scientist, have been asked to give some insight into road traffic crashes in Bradford.  
+
+Datasets
+```{r}
+list.files()
+```
+
+
+```{r}
+casualties <- read_csv("bfd_casualties.csv", show_col_types = FALSE)
+crashes <- read.csv("bfd_crashes.csv")
+vehicles <- read.csv("bfd_vehicles.csv")
+
+
+head(casualties)
+head(crashes)
+head(vehicles)
+```
+##Casualties
+
+```{r}
+#head(casualties)
+
+casualty_year <- casualties %>% 
+                    group_by(accident_year) %>% 
+                    summarise(no_acc = n()) %>% 
+                    ungroup()
+
+ggplot(data = casualties, #%>% mutate(accident_year = factor(accident_year))
+       aes(x = accident_year)) +
+  geom_bar(fill = 'blue4', alpha =.4) +
+  labs(title = 'Total number of accident casualties',
+       x = 'Accident year',
+       y = 'Number of accidents') +
+  theme_classic()
+
+```
+```{r}
+casualty_imd <- casualties %>% 
+  mutate(imd = 
+           ifelse(casualty_imd_decile == 'Data missing or out of range',0,1)) %>% 
+            filter(imd == 1) %>% select(-imd)
+
+
+
+ggplot(data = casualty_imd, #%>% mutate(accident_year = factor(accident_year))
+       aes(x = casualty_imd_decile)) +
+  geom_bar(fill = 'blue4', alpha =.4) +
+  labs(title = 'Number of accident casualties by level of deprivation',
+      x = 'Level of deprivation',
+      y = 'Number of accidents') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  
+```
+```{r}
+ggplot(data = casualty_imd, #%>% mutate(accident_year = factor(accident_year))
+       aes(x = casualty_imd_decile)) +
+  geom_bar(fill = 'blue4', alpha =.4) +
+  facet_wrap(vars (accident_year)) +
+  labs(title = 'Number of accident casualties by level of deprivation',
+      x = 'Level of deprivation',
+      y = 'Number of accidents') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+```{r}
+
+casualty_gender <- casualties %>% 
+                    group_by(sex_of_casualty) %>% 
+                    summarise(num_casualties = n())
+
+ggplot(casualty_gender, aes(x = "", y = num_casualties, fill = sex_of_casualty)) +
+  geom_col(color = "black") +
+  coord_polar(theta = "y") +
+  geom_text(aes(label = sex_of_casualty),
+            position = position_stack(vjust = 0.5)) +
+  coord_polar(theta = "y") +
+#  theme(legend.position = 'none') +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#ebf2ff"),
+        plot.background = element_rect(fill = "#ebf2ff"),
+        legend.background = element_rect(fill = "#ebf2ff"))
+
+```
+
+# install.packages("ggplot2")
+library(ggplot2)
+
+ggplot(df, aes(x = "", y = value, fill = group)) +
+  geom_col(color = "black") +
+  geom_text(aes(label = value),
+            position = position_stack(vjust = 0.5)) +
+  coord_polar(theta = "y") +
+  scale_fill_brewer() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.background = element_rect(fill = "#ebf2ff"),
+        plot.background = element_rect(fill = "#ebf2ff"),
+        legend.background = element_rect(fill = "#ebf2ff")) 
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+```{r}
+ggplot(data = casualties, #%>% mutate(accident_year = factor(accident_year))
+       aes(x = casualty_class)) +
+  geom_bar(fill = 'blue4', alpha =.4) +
+  facet_wrap(vars (sex_of_casualty)) +
+  labs(title = 'Number of accident casualties by level of deprivation',
+      x = 'Level of deprivation',
+      y = 'Number of accidents') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+```{r}
+
+ggplot(data = casualties %>% filter(bus_or_coach_passenger == 'Boarding'|bus_or_coach_passenger == 'Alighting'|bus_or_coach_passenger == 'Seated passenger'|bus_or_coach_passenger == 'Standing passenger'), #%>% mutate(accident_year = factor(accident_year))
+       aes(x = age_band_of_casualty)) +
+  geom_bar(fill = 'blue4', alpha =.4) +
+  facet_wrap(vars (bus_or_coach_passenger)) +
+  labs(title = 'Number of accident casualties by level of deprivation',
+   #   x = 'Level of deprivation',
+      y = 'Number of accidents') +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+```{r}
+
+c_type <- casualties %>% 
+   group_by (casualty_type) %>% 
+  summarise(no = n())
+
+```
+
+
+```{r}
+nrow(table(casualties$accident_reference))
+```
+
+```{r}
+duplicated_id <- vasdeath %>% group_by(rootlpno) %>% count() %>% filter(n > 1)
+
+
+```
+
+
+Look at complete table
+
+```{r}
+Bradford_acc <- casualties %>% 
+                left_join(crashes, by = 'accident_index') %>% 
+                left_join(vehicles, by = 'accident_index')
+```
+```{r}
+Bradford_acc <- Bradford_acc %>% mutate_if(is.character,as.factor)
+
+str(Bradford_acc)
+
+
+  ggplot(Bradford_acc,
+       aes(x = casualty_t)) +
+  geom_bar(fill = 'blue') +
+  labs(title = 'Barplot of accidents by casualty class',
+        x = 'Casualty class',
+        y = 'Casualty count')
+  
+```
+
+
+1,960 vehicles have duplicated entries. Upon closer examination, 
+
+```{r}
+vehicles[duplicated(vehicles$accident_index),] %>% nrow()
+vehicles[vehicles$accident_index =='2018135111193',]
+vehicles[vehicles$accident_index =='2018135131754',]
+vehicles[vehicles$accident_index =='2018135131777',]
+vehicles[vehicles$accident_index =='2018135141851',]
+vehicles[vehicles$accident_index =='2018135151357',]
+```
+```{r}
+index <- vehicles[duplicated(vehicles$accident_index),]
+
+#vehicles[index,]
+```
+
