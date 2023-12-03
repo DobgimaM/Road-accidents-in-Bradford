@@ -10,6 +10,9 @@ output:
     self_contained: yes
     toc: yes
     toc_float: yes
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r, results='hide', message=FALSE, warning=FALSE, echo=FALSE}
@@ -18,6 +21,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(flextable)
+library(forcats)
 
 options(shiny.usecairo=T)
 setalloccol = data.table::setalloccol
@@ -25,26 +29,28 @@ setalloccol = data.table::setalloccol
 
 ## Road traffic accidents in Bradford
 
-**Task**
-The Director of Neighbourhoods wants to understand more about road traffic crashes in Bradford.  You, the HDRC data scientist, have been asked to give some insight into road traffic crashes in Bradford.  
+**Task** The Director of Neighbourhoods wants to understand more about
+road traffic crashes in Bradford. You, the HDRC data scientist, have
+been asked to give some insight into road traffic crashes in Bradford.
+
+*Note* Availability of more specific dates rather than years would allow
+for calculation of rates
 
 Datasets
+
 ```{r}
 list.files()
 ```
-
 
 ```{r}
 casualties <- read_csv("bfd_casualties.csv", show_col_types = FALSE)
 crashes <- read.csv("bfd_crashes.csv")
 vehicles <- read.csv("bfd_vehicles.csv")
 
-
-head(casualties)
-head(crashes)
-head(vehicles)
+attach(casualties)
 ```
-##Casualties
+
+##1. Casualties
 
 ```{r}
 #head(casualties)
@@ -55,174 +61,234 @@ casualty_year <- casualties %>%
                     ungroup()
 
 ggplot(data = casualties, #%>% mutate(accident_year = factor(accident_year))
-       aes(x = accident_year)) +
-  geom_bar(fill = 'blue4', alpha =.4) +
-  labs(title = 'Total number of accident casualties',
+       aes(x = accident_year), y = no_acc) +
+  geom_bar(fill = '#44846fff') +
+  facet_wrap(vars(casualty_severity)) +
+  labs(title = 'Number of accident casualties by year',
        x = 'Accident year',
        y = 'Number of accidents') +
-  theme_classic()
+  theme_bw()
 
 ```
+
 ```{r}
-casualty_imd <- casualties %>% 
-  mutate(imd = 
-           ifelse(casualty_imd_decile == 'Data missing or out of range',0,1)) %>% 
-            filter(imd == 1) %>% select(-imd)
+df_sev <- table(casualties$casualty_severity,casualties$accident_year)
+df_sev
+```
+
+```{r}
+df <- data.frame(cbind(df_sev[,1],df_sev[,2],df_sev[,3]))
+names(df) <- c('2018','2019',"2020")
+df <- df %>% mutate(`2018` = ((`2020` - `2018`)/`2020`)*100) %>% 
+  mutate(`2018` = round(`2018`,1)) %>% 
+  mutate(`2019` = ((`2020` - `2019`)/`2020`)*100) %>% 
+  mutate(`2019` = round(`2019`,1))
+
+df_severity <- df %>% select('2020','% change from 2018'= '2018', '% change from 2019'='2019')
+
+df_severity
+
+```
+## 2. Casualties and rates by road user type
+
+```{r}
+temp <- casualties %>% 
+  group_by(casualty_type) %>% 
+  mutate( cas_seq = row_number()) %>%
+  mutate(tot_cas = max(cas_seq)) %>% 
+  ungroup() %>% 
+  arrange(casualty_type) %>% 
+  mutate(tag = 0) %>% 
+  mutate(tag = ifelse(tot_cas >= 200, 1,tag)) %>% 
+  mutate(tag = ifelse(tag == 0 & tot_cas >= 20,2,tag)) %>% 
+  mutate(tag = ifelse(tag == 0 & tot_cas< 20,3,tag)) %>%
+  mutate(accident_year = factor(accident_year))
+
+temp1 <- temp %>% 
+  filter(cas_seq == 1) %>% 
+  arrange(desc(tot_cas)) %>% 
+  select(casualty_type, casualty_count = tot_cas) %>% 
+  rename(`Casualty type` = "casualty_type", `Casualty count` = "casualty_count")
+
+flextable(temp1, cwidth = 2, col_keys = names(temp1))
+```
+
+```{r}
+
+#temp$sex_of_casualty <- temp$sex_of_casualty %>% factor(levels = c('Male','Female'))
+
+#casualty_type <- factor(casualty_type)
+
+my_colors <- c("#006853ff", "#ff7733ff", '#001a70ff')  
+names(my_colors) <- levels(factor(levels(temp$accident_year)))
+my_scale <- scale_fill_manual(name = "Group", values = my_colors) 
 
 
+ggplot(data = temp %>% 
+         filter(tag == 1),
+       aes(x = casualty_type, fill = fct_infreq(accident_year))) +
+  geom_bar(position="dodge") +
+  labs(title = 'Reported road fatalities by road user type in Bradford, 2020 compared with 2018',
+         subtitle = '200+ total casualties',
+      x = 'Casualty type',
+      y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 10, angle = 0, vjust = 0.5, hjust=0.5),
+        axis.text.x = element_text(margin = margin(t = 0, unit = "cm"))) +
+  my_scale
+```
 
-ggplot(data = casualty_imd, #%>% mutate(accident_year = factor(accident_year))
-       aes(x = casualty_imd_decile)) +
-  geom_bar(fill = 'blue4', alpha =.4) +
-  labs(title = 'Number of accident casualties by level of deprivation',
-      x = 'Level of deprivation',
+```{r}
+
+ggplot(data = temp %>% filter(tag ==2),
+       aes(x = casualty_type, fill = fct_infreq(factor(accident_year)))) +
+  geom_bar(position="dodge") +
+  labs(title = 'Reported road fatalities by road user type in Bradford for 2018, 2019 and 2020 ',
+         subtitle = '20-200 total casualties',
+      x = 'Casualty type',
       y = 'Number of accidents') +
   theme_classic() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-  
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=0.5, color="black",  size=8)) +
+  guides(x = guide_axis(n.dodge = 2)) +
+  my_scale
 ```
+
 ```{r}
-ggplot(data = casualty_imd, #%>% mutate(accident_year = factor(accident_year))
-       aes(x = casualty_imd_decile)) +
-  geom_bar(fill = 'blue4', alpha =.4) +
-  facet_wrap(vars (accident_year)) +
-  labs(title = 'Number of accident casualties by level of deprivation',
-      x = 'Level of deprivation',
+
+#my_colors <- c("#006853ff", "#ff7733ff", '#001a70ff')  
+#names(my_colors) <- levels(factor(levels(temp$accident_year)))
+#my_scale <- scale_fill_manual(name = "Group", values = my_colors) 
+
+
+ggplot(data = temp %>% filter(tag ==2),
+       aes(x = casualty_type, fill = accident_year)) +
+  geom_bar(position = 'dodge') +
+  labs(title = 'Reported road fatalities by road user type in Bradford, 2020 compared with 2018',
+         subtitle = 'less than 20 total casualties',
+      x = 'Casualty type',
       y = 'Number of accidents') +
   theme_classic() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=0.5, color="black",  size=8)) +
+  guides(x = guide_axis(n.dodge = 2)) +
+my_scale
 
 ```
 
 ```{r}
+df_typ <- table(casualties$casualty_type,casualties$accident_year)
+df_typ
+```
 
-casualty_gender <- casualties %>% 
-                    group_by(sex_of_casualty) %>% 
-                    summarise(num_casualties = n())
+Table 4: Reported road fatalities by road user type in Great Britain,
+2021, compared with 2020, 2019 and 2011
 
-ggplot(casualty_gender, aes(x = "", y = num_casualties, fill = sex_of_casualty)) +
-  geom_col(color = "black") +
-  coord_polar(theta = "y") +
-  geom_text(aes(label = sex_of_casualty),
-            position = position_stack(vjust = 0.5)) +
-  coord_polar(theta = "y") +
-#  theme(legend.position = 'none') +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        panel.grid = element_blank(),
-        panel.background = element_rect(fill = "#ebf2ff"),
-        plot.background = element_rect(fill = "#ebf2ff"),
-        legend.background = element_rect(fill = "#ebf2ff"))
+```{r}
+df1 <- data.frame(cbind(df_typ[,1],df_typ[,2],df_typ[,3]))
+names(df1) <- c('2018','2019',"2020")
+df1 <- df1 %>% mutate(`2018` = ((`2020` - `2018`)/`2020`)*100) %>% 
+  mutate(`2018` = round(`2018`,1)) %>% 
+  mutate(`2019` = ((`2020` - `2019`)/`2020`)*100) %>% 
+  mutate(`2019` = round(`2019`, 1))
+
+df_type <- df1 %>% 
+  select('2020','% change from 2018'= '2018', '% change from 2019'='2019') %>% 
+  arrange(desc(`2020`))
+
+df_type 
 
 ```
 
-# install.packages("ggplot2")
-library(ggplot2)
-
-ggplot(df, aes(x = "", y = value, fill = group)) +
-  geom_col(color = "black") +
-  geom_text(aes(label = value),
-            position = position_stack(vjust = 0.5)) +
-  coord_polar(theta = "y") +
-  scale_fill_brewer() +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank(),
-        panel.grid = element_blank(),
-        panel.background = element_rect(fill = "#ebf2ff"),
-        plot.background = element_rect(fill = "#ebf2ff"),
-        legend.background = element_rect(fill = "#ebf2ff")) 
- 
- 
- 
- 
- 
- 
-
+## 3. Casualties and by age and sex
 
 ```{r}
-ggplot(data = casualties, #%>% mutate(accident_year = factor(accident_year))
-       aes(x = casualty_class)) +
-  geom_bar(fill = 'blue4', alpha =.4) +
-  facet_wrap(vars (sex_of_casualty)) +
-  labs(title = 'Number of accident casualties by level of deprivation',
-      x = 'Level of deprivation',
-      y = 'Number of accidents') +
+
+temp$sex_of_casualty <- temp$sex_of_casualty %>% factor(levels = c('Male','Female'))
+
+my_colors <- c("#006853ff", "#ff7733ff")  
+names(my_colors) <- levels(factor(levels(temp$sex_of_casualty)))
+my_scale <- scale_fill_manual(name = "Group", values = my_colors) 
+
+ggplot(data = temp %>% 
+         filter(tag == 1),
+       aes(x = age_band_of_casualty, fill = sex_of_casualty)) +
+  geom_bar(position="dodge") +
+  facet_wrap(vars(accident_year)) +
+  labs(title = 'Reported road fatalities by road user type in Bradford, 2020 compared with 2018',
+         subtitle = 'Casualties stratified by year of fatality and sex of casualty',
+      x = 'Casualty type',
+      y = 'Number of accidents'
+  ) +
   theme_classic() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
 
 ```
 
 ```{r}
-
-ggplot(data = casualties %>% filter(bus_or_coach_passenger == 'Boarding'|bus_or_coach_passenger == 'Alighting'|bus_or_coach_passenger == 'Seated passenger'|bus_or_coach_passenger == 'Standing passenger'), #%>% mutate(accident_year = factor(accident_year))
-       aes(x = age_band_of_casualty)) +
-  geom_bar(fill = 'blue4', alpha =.4) +
-  facet_wrap(vars (bus_or_coach_passenger)) +
-  labs(title = 'Number of accident casualties by level of deprivation',
-   #   x = 'Level of deprivation',
-      y = 'Number of accidents') +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-```
-```{r}
-
-c_type <- casualties %>% 
-   group_by (casualty_type) %>% 
-  summarise(no = n())
-
+df_age_m <- casualties %>% filter(sex_of_casualty == 'Male') %>% select(age_band_of_casualty,accident_year) %>% table()
+df_age_f <- casualties %>% filter(sex_of_casualty == 'Female') %>% select(age_band_of_casualty,accident_year) %>% table()
 ```
 
+Table 4: Reported road fatalities by road user type in Great Britain,
+2021, compared with 2020, 2019 and 2011
 
 ```{r}
-nrow(table(casualties$accident_reference))
+df2m <- data.frame(cbind(df_age_m[,1],df_age_m[,2], df_age_m[,3])) %>% mutate(Sex = 'Male')
+df2f <- data.frame(cbind(df_age_f[,1],df_age_f[,2], df_age_f[,3])) %>% mutate(Sex = 'Female')
+df2 <- rbind(df2m, df2f)
+names(df2) <- c('2018','2019','2020', 'Sex')
+df2 <- df2 %>% mutate(`2018` = ((`2020` - `2018`)/`2020`)*100) %>% 
+  mutate(`2018` = round(`2018`,1)) %>% 
+  mutate(`2019` = ((`2020` - `2019`)/`2020`)*100) %>% 
+  mutate(`2019` = round(`2019`, 1))
+
+df_sex <- df2 %>% 
+  select('Sex','2020','% change from 2018'= '2018', '% change from 2019'='2019') %>% 
+  arrange(desc(Sex))
+
+Age <- c("0 - 5", "11 - 15", "16 - 20", "21 - 25", "26 - 35", "36 - 45", "46 - 55", "56 - 65", "6 - 10", "66 - 75", "Data missing or out of range", "Over 75", "0 - 5", "11 - 15", "16 - 20", "21 - 25", "26 - 35", "36 - 45", "46 - 55", "56 - 65", "6 - 10", "66 - 75", "Data missing or out of range", "Over 75")
+
+
+df_sex1 <- factor(Age)  %>%
+  cbind(df_sex) %>%
+  group_by(Sex) %>% 
+  arrange(Age) %>%
+  ungroup()%>%
+  arrange(desc(Sex)) %>%data.frame()
+
+df_sexa <- df_sex1 %>% 
+  slice(-11,-23) %>%
+  group_by(Sex) %>% 
+  mutate(ind = row_number()) %>% 
+  ungroup() %>% 
+  mutate(tag = 2)
+
+# Re-order the rows
+
+for (i in 2:nrow(df_sexa)) {
+  if(df_sexa$ind[i] > 1 & df_sexa$ind[i] != 9)
+    {
+    df_sexa$tag[i] <- df_sexa$ind[i] + 1
+  }
+}
+
+df_sexa$tag[df_sexa$ind == 1] <- 1
+
+df_sexa <- df_sexa %>% 
+                arrange(desc(Sex), tag) %>% 
+                select(-ind, -tag) %>% 
+                data_frame()
+
+names(df_sexa) <- c('Age cat','Sex', '2020', '% change from 2018', '% change from 2019')
+
+df_sex <- flextable(df_sexa, names(df_sexa), cwidth = 1)
+df_sex
 ```
 
 ```{r}
-duplicated_id <- vasdeath %>% group_by(rootlpno) %>% count() %>% filter(n > 1)
-
-
-```
-
-
-Look at complete table
-
-```{r}
-Bradford_acc <- casualties %>% 
-                left_join(crashes, by = 'accident_index') %>% 
-                left_join(vehicles, by = 'accident_index')
-```
-```{r}
-Bradford_acc <- Bradford_acc %>% mutate_if(is.character,as.factor)
-
-str(Bradford_acc)
-
-
-  ggplot(Bradford_acc,
-       aes(x = casualty_t)) +
-  geom_bar(fill = 'blue') +
-  labs(title = 'Barplot of accidents by casualty class',
-        x = 'Casualty class',
-        y = 'Casualty count')
-  
-```
-
-
-1,960 vehicles have duplicated entries. Upon closer examination, 
-
-```{r}
-vehicles[duplicated(vehicles$accident_index),] %>% nrow()
-vehicles[vehicles$accident_index =='2018135111193',]
-vehicles[vehicles$accident_index =='2018135131754',]
-vehicles[vehicles$accident_index =='2018135131777',]
-vehicles[vehicles$accident_index =='2018135141851',]
-vehicles[vehicles$accident_index =='2018135151357',]
-```
-```{r}
-index <- vehicles[duplicated(vehicles$accident_index),]
-
-#vehicles[index,]
+#ggsave(path = here("study1", "figs", "bar_admissions_gender_dept.png"), 
+#	p, width = 7, height = 7)
 ```
 
