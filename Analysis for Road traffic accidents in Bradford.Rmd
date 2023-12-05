@@ -52,12 +52,19 @@ attach(casualties)
 
 #1. Descriptives
 
-## Casualty severity
-Majority of casualty cases were
-
 ```{r}
-t1 <- table(casualty_severity)
-t1
+nrow(distinct(casualties %>% select(accident_index)))
+
+nrow(casualties)
+```
+There were 2,518 accidents from 2018 to 2020 which resulted in 3,350 casualties. Most casualties did not result in deaths (85% Slight and 14% Serious), and overall, casualties decreased across all severity categories from 2018 to 2020.
+
+```{r, warning=FALSE}
+t1 <- prop.table(table(casualty_severity))  %>% round(2)
+t1 *100
+
+round(chisq.test(table(casualties$accident_year,casualties$sex_of_casualty))$p.value,3)
+round(chisq.test(table(casualties$accident_year, casualties$age_band_of_casualty))$p.value,3)
 ```
 
 ```{r}
@@ -72,14 +79,10 @@ ggplot(data = casualties,
   theme_bw()
 
 ```
-Overall, casualties have declined across all severity categories from 2018 to 2020
 
 ```{r}
 df_sev <- table(casualties$casualty_severity,casualties$accident_year)
-df_sev
-```
 
-```{r}
 df <- data.frame(cbind(df_sev[,1],df_sev[,2],df_sev[,3]))
 names(df) <- c('2018','2019',"2020")
 df <- df %>% mutate(`2018` = ((`2020` - `2018`)/`2020`)*100) %>% 
@@ -95,27 +98,37 @@ df_severity
 
 ## Casualty class
 
-Drivers were twice as likely to be responsible for accidents as Pedestrians
+Drivers were more than twice as likely to be involved in accidents as
+Pedestrians, even after adjusting for sex
 
 ```{r}
 ggplot(data = casualties,
        aes(x = fct_infreq(casualty_class)), y = no_acc) +
   geom_bar(fill = '#44846fff') +
   facet_wrap(vars(sex_of_casualty)) +
-  labs(title = 'Number of accident casualties against Casualty class',
+  labs(title = 'Number of accident casualties against casualty class',
        subtitle = 'Stratified by year of accident',
        x = 'Casualty class',
        y = 'Number of accidents') +
   theme_bw() 
 
 ```
+
 ## Casualties by road user type
+
+Car occupants, pedestrians and cyclists were the most accident
+casualties compared to other road users
+
+**Table 1: Reported road casualty counts by road user type in Bradford,
+2018,2019 and 2020**
 
 ```{r}
 temp <- casualties %>%
+# Remove missing data
   mutate(tag = ifelse(age_band_of_casualty %in% 'Data missing or out of range',1,0)) %>%
   slice(-(which(tag == 1))) %>% 
   select(-tag) %>% 
+  
   group_by(casualty_type) %>% 
   mutate(cas_seq = row_number()) %>%
   mutate(tot_cas = max(cas_seq)) %>% 
@@ -140,8 +153,8 @@ flextable(temp1, cwidth = 2, col_keys = names(temp1))
 df_typ <- table(casualties$casualty_type,casualties$accident_year)
 ```
 
-Table 4: Reported road fatalities by road user type in Great Britain,
-2021, compared with 2020, 2019 and 2011
+**Table 2: Changes in casualty counts by road user type in Bradford,
+2018,2019 and 2020**
 
 ```{r}
 df1 <- data.frame(cbind(df_typ[,1],df_typ[,2],df_typ[,3]))
@@ -155,31 +168,40 @@ df_type <- df1 %>% cbind(rownames(df1)) %>%
   select('Class'='rownames(df1)' ,'2020','% change from 2018'= '2018', '% change from 2019'='2019') %>% 
   arrange(desc(`2020`))
 
-flextable(df_type, cwidth = 2)
+flextable(df_type, cwidth = 1)
 
 ```
+
+Among the most at risk road users (200+ total casualties), the most 
+improvement was seen in 2020 was from car occupants (casualties decreased by 
+43% compared to 2018 and 23.8% compared to 2019). Conversely, there were 
+more cyclist casualties in 2020 than the preceding year (9.1% increase from 2019).
+Of the remaining road users who witnessed casualty increments, 5 involved either 
+a motorcycle or mobility scooter.
 
 ### 200+ Casualties
 
 ```{r}
 
-#temp$sex_of_casualty <- temp$sex_of_casualty %>% factor(levels = c('Male','Female'))
-
-#casualty_type <- factor(casualty_type)
+# Remove missing data
+temp_imd <-  temp %>% 
+  mutate(tag = ifelse(casualty_imd_decile %in% 'Data missing or out of range',1,0)) %>%
+  slice(-(which(tag == 1))) %>% 
+  select(-tag) 
 
 my_colors <- c("#006853ff", "#ff7733ff", '#001a70ff')  
 names(my_colors) <- levels(factor(levels(temp$accident_year)))
-my_scale <- scale_fill_manual(name = "Group", values = my_colors) 
+my_scale <- scale_fill_manual(name = "Year", values = my_colors) 
 
 
-ggplot(data = temp %>% 
-         filter(tag == 1),
+ggplot(data = temp_imd %>% 
+         filter(),
        aes(x = fct_infreq(casualty_imd_decile), fill = fct_infreq(accident_year))) +
-    facet_wrap(vars(sex_of_casualty)) +
+ #   facet_wrap(vars(sex_of_casualty)) +
   geom_bar(position="dodge") +
-  labs(title = 'Reported road fatalities by road user type in Bradford, 2020 compared with 2018',
+  labs(title = 'Reported road casualties by index of multiple deprivation in Bradford, 2020 compared with 2018',
          subtitle = '200+ total casualties',
-      x = 'Casualty type',
+      x = 'Level of deprivation',
       y = 'Number of accidents'
   ) +
   theme_classic() +
@@ -188,14 +210,74 @@ ggplot(data = temp %>%
   my_scale
 ```
 
-# Road user type
+Road casualties were directly proportional to the level of deprivation.
+The most deprived areas witnessed the most casualties across all years.
+
+# Casualty by age category, adjusting for gender
+
+```{r}
+
+# Remove missing data
+temp_imd <-  temp %>% 
+  mutate(tag = ifelse(casualty_imd_decile %in% 'Data missing or out of range',1,0)) %>%
+  slice(-(which(tag == 1))) %>% 
+  select(-tag) 
+
+
+ggplot(data = temp %>% 
+         filter(),
+       aes(x = age_band_of_casualty, fill = fct_infreq(accident_year))) +
+#    facet_wrap(vars(sex_of_casualty)) +
+  geom_bar(position="dodge") +
+  labs(title = 'Reported road casualties by index of multiple deprivation in Bradford, 2020 compared with 2018',
+         subtitle = '200+ total casualties',
+      x = 'Age band of casualties',
+      y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text = element_text(size = 10, angle = 90, vjust = 0.5, hjust=0.5),
+        axis.text.x = element_text(margin = margin(t = 0, unit = "cm"))) +
+  my_scale
+```
+
+Majority of accident casualties were in their active years (16-65 years)
+
+```{r}
+a1<- casualties %>%
+  filter(accident_year == 2018) %>% 
+ group_by(age_band_of_casualty) %>% 
+summarise(A2018 = n())
+
+a2<- casualties %>%
+  filter(accident_year == 2019) %>% 
+ group_by(age_band_of_casualty) %>% 
+summarise(A2019 = n())
+
+a3<- casualties %>%
+  filter(accident_year == 2020) %>% 
+ group_by(age_band_of_casualty) %>% 
+summarise(A2020 = n())
+
+Casualty_age <- left_join(a1,a2, by = "age_band_of_casualty") %>% 
+  left_join(a3, by = "age_band_of_casualty") %>% 
+  mutate(A2019 = (A2020-A2019)/A2020) %>% 
+  mutate(A2018 = (A2020-A2018)/A2020) %>% 
+  mutate(A2018 = round(A2018*100,2)) %>% 
+  mutate(A2019 = round(A2019*100,2)) %>% 
+  rename(Age = age_band_of_casualty, `% change from 2018` = A2018, `% change from 2019` = A2019, `2020` = A2020) %>% 
+  select(Age,`2020`,`% change from 2019`,`% change from 2018`)
+
+flextable(Casualty_age, cwidth = 1)
+```
+
+
 
 ```{r}
 df_age_m <- casualties %>% filter(sex_of_casualty == 'Male') %>% select(age_band_of_casualty,accident_year) %>% table()
 df_age_f <- casualties %>% filter(sex_of_casualty == 'Female') %>% select(age_band_of_casualty,accident_year) %>% table()
 ```
 
-Table 4: Reported road fatalities by road user type in Great Britain,
+Table 4: Reported road casualties by road user type in Great Britain,
 2021, compared with 2020, 2019 and 2011
 
 ```{r}
@@ -254,42 +336,80 @@ names(df_sexa) <- c('Age cat','Sex', '2020', '% change from 2018', '% change fro
 df_sex <- flextable(df_sexa, names(df_sexa), cwidth = 1)
 df_sex
 ```
-```{r}
 
+For males, an increase in casualties was seen in 2020 among 
+children (6 - 10 years) and young-middle aged adults (21-25 and 26-35 years). 
+Similarly, female casualties increased among infants (0-5 years, 9.1% from 2018) 
+and middle adults (26-35 years). The most improvement was in road users 
+over 75 years for females (-166.7% form 2018) and 46-55 years for males (-115.2% from 2019).
+
+### Examine age categories with most casualties
+
+The casualty increments in 2020 were seen in the age categories 0-5 years, 6-10 years, 16-20,
+21-25 years and 26-35 years.
+
+```{r}
 temp$sex_of_casualty <- temp$sex_of_casualty %>% factor(levels = c('Male','Female'))
 temp$age_band_of_casualty <- temp$age_band_of_casualty %>% factor()
 
 
 #(levels = c( '0 - 5', '11 - 15', '16 - 20', '21 - 25', '26 - 35', '36 - 45', '46 - 55',  #'56 - 65', '6 - 10', '66 - 75', 'Over 75 '))
 
+temp2 <- temp %>% 
+  mutate(tag2 = 0) %>% 
+  mutate(tag2 = ifelse(age_band_of_casualty %in% '0 - 5','0 to 10 years',tag2)) %>% 
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '6 - 10','0 to 10 years',tag2)) %>% 
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '21 - 25','21 to 35 years',tag2)) %>%
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '26 - 35','21 to 35 years',tag2))
+  
+temp2 <- temp %>% 
+  mutate(tag2 = 0) %>% 
+  mutate(tag2 = ifelse(age_band_of_casualty %in% '0 - 5','0 - 5',tag2)) %>% 
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '6 - 10','6 - 10',tag2)) %>% 
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '16 - 20','16 - 20',tag2)) %>%
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '21 - 25','21 - 25',tag2)) %>%
+  mutate(tag2 = ifelse(tag2 == 0 & age_band_of_casualty %in% '26 - 35','26 - 35',tag2))
 
 
+table(temp2$tag2)
+
+casualty_cat_most <- temp2 %>% 
+  filter(tag2 != 0) %>%
+  mutate(tag = ifelse(tag == 1, '200 or more casualties','Less than 200 casualties')) %>%
+  filter(tag == '200 or more casualties')
+```
+
+
+```{r}
 my_colors <- c("#006853ff", "#ff7733ff")  
 names(my_colors) <- levels(factor(levels(temp$sex_of_casualty)))
-my_scale <- scale_fill_manual(name = "Group", values = my_colors) 
-ggplot(data = temp %>% 
-         filter(tag == 1),
-       aes(x = fct_infreq(age_band_of_casualty))) +
-  geom_bar(position="dodge", fill = '#001a70ff') +
+my_scale <- scale_fill_manual(name = "Sex", values = my_colors) 
+
+ggplot(data = casualty_cat_most %>% filter(tag2 == '0 - 5' & sex_of_casualty == 'Female'),
+       aes(x = fct_infreq(casualty_type), fill = sex_of_casualty)) +
+  geom_bar(position="dodge") +
   facet_wrap(vars(accident_year)) +
-  labs(title = 'Reported road fatalities by road user type in Bradford, 2020 compared with 2018',
-         subtitle = 'Casualties stratified by year of fatality and sex of casualty',
-      x = 'Casualty type',
-      y = 'Number of accidents'
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Children (0-5 years) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty class',
+       y = 'Number of accidents'
   ) +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
   my_scale
 
-ggplot(data = temp %>% 
-         filter(tag == 1),
-       aes(x = fct_infreq(age_band_of_casualty), fill = sex_of_casualty)) +
+```
+Although females casualties increased across the 3 years, they were below 8 casualties per year. Car occupant casualties increased each year.
+
+```{r}
+ggplot(data = casualty_cat_most %>% filter(tag2 == '6 - 10' & sex_of_casualty == 'Male'),
+       aes(x = fct_infreq(casualty_type), fill = sex_of_casualty)) +
   geom_bar(position="dodge") +
-  facet_wrap(vars(sex_of_casualty)) +
-  labs(title = 'Reported road fatalities by road user type in Bradford, 2020 compared with 2018',
-         subtitle = 'Casualties stratified by year of fatality and sex of casualty',
-      x = 'Casualty type',
-      y = 'Number of accidents'
+  facet_wrap(vars(accident_year)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Children (6-10) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty class',
+       y = 'Number of accidents'
   ) +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
@@ -297,8 +417,294 @@ ggplot(data = temp %>%
 
 ```
 
-## 3. Casualties and by age and sex
 
+
+```{r}
+ggplot(data = casualty_cat_most %>% filter(tag2 == '16 - 20' & sex_of_casualty == 'Male'),
+       aes(x = fct_infreq(casualty_type), fill = sex_of_casualty)) +
+  geom_bar(position="dodge") +
+  facet_wrap(vars(accident_year)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Children (16-20) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty class',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+```
+```{r}
+ggplot(data = casualty_cat_most %>% filter(tag2 == '21 - 25' & sex_of_casualty == 'Male'),
+       aes(x = fct_infreq(casualty_type), fill = sex_of_casualty)) +
+  geom_bar(position="dodge") +
+  facet_wrap(vars(accident_year)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Children (21-25) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty class',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+
+```
+```{r}
+ggplot(data = casualty_cat_most %>% filter(tag2 == '26 - 35'),
+       aes(x = fct_infreq(casualty_type), fill = sex_of_casualty)) +
+  geom_bar(position="dodge") +
+  facet_wrap(vars(accident_year)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Adults (26-35) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty class',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+```
+```{r}
+ggplot(data = casualty_cat_most,
+       aes(x = fct_infreq(tag2))) +
+  geom_bar(position="dodge", fill = 'blue') +
+  facet_wrap(vars(casualty_type)) +
+  labs(title = 'Reported road casualties by age category stratified by casualty type in Bradford, 2020',
+       subtitle = 'Children (0-5 years) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty class',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+```
+
+
+```{r}
+ggplot(data = casualty_cat_most,
+       aes(x = fct_infreq(tag2))) +
+  geom_bar(position="dodge", fill = 'blue') +
+  facet_wrap(vars(casualty_class)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Adults (26-35) involved in accident where casualty class recorded 200 or more casualties in 2020',
+       x = 'Casualty age group',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) 
+```
+
+
+```{r}
+crashes <- crashes %>% mutate(accident_year = factor(accident_year))
+
+casualty_young <- casualty_cat_most %>% 
+  left_join(crashes, by = c('accident_index', 'accident_year')) %>% 
+  filter(casualty_type == 'Car occupant')
+```
+
+Examine car
+```{r}
+
+```
+
+
+
+
+```{r}
+c1<- casualty_young %>% 
+  filter(accident_year == '2020') %>% 
+  group_by(light_conditions) %>%
+  select(casualty_type, light_conditions) %>% 
+  summarise(`2020` = n()) %>% 
+  ungroup()
+
+c2 <- casualty_young %>% 
+  filter(accident_year == '2019') %>% 
+  group_by(light_conditions) %>%
+  select(casualty_type, light_conditions) %>% 
+  summarise(`2019` = n()) %>% 
+  ungroup() 
+
+c3 <- casualty_young %>% 
+  filter(accident_year == '2018') %>% 
+  group_by(light_conditions) %>%
+  select(casualty_type, light_conditions) %>% 
+  summarise(`2018` = n()) %>% 
+  ungroup() 
+
+light_conditions <- left_join(c1,c2, by = 'light_conditions') %>% left_join(c3, by = 'light_conditions')
+
+light_conditions %>% arrange(desc(`2020`))
+
+# chisq.test(light_conditions$`2020`,light_conditions$`2018`)
+```
+
+
+```{r}
+casualty_young %>% 
+  group_by(weather_conditions) %>%
+  select(casualty_type, weather_conditions) %>% 
+  summarise(no_of_casualties = n()) %>% 
+  ungroup() %>% 
+  arrange(desc(no_of_casualties))
+```
+# Weather conditions
+
+```{r}
+c1<- casualty_young %>% 
+  filter(accident_year == '2020') %>% 
+  group_by(weather_conditions) %>%
+  select(casualty_type, weather_conditions) %>% 
+  summarise(`2020` = n()) %>% 
+  ungroup()
+
+c2 <- casualty_young %>% 
+  filter(accident_year == '2019') %>% 
+  group_by(weather_conditions) %>%
+  select(casualty_type, weather_conditions) %>% 
+  summarise(`2019` = n()) %>% 
+  ungroup() 
+
+c3 <- casualty_young %>% 
+  filter(accident_year == '2018') %>% 
+  group_by(weather_conditions) %>%
+  select(casualty_type, weather_conditions) %>% 
+  summarise(`2018` = n()) %>% 
+  ungroup() 
+
+weather_conditions <- left_join(c1,c2, by = 'weather_conditions') %>% left_join(c3, by = 'weather_conditions')
+
+weather_conditions %>% arrange(desc(`2020`))
+
+```
+
+Most casualties among children occurred during the day, with lights and
+in fine weather condition.
+
+# Road surface conditions
+
+```{r}
+c1<- casualty_young %>% 
+  filter(accident_year == '2020') %>% 
+  group_by(road_type) %>%
+  select(casualty_type, road_type) %>% 
+  summarise(`2020` = n()) %>% 
+  ungroup()
+
+c2 <- casualty_young %>% 
+  filter(accident_year == '2019') %>% 
+  group_by(road_type) %>%
+  select(casualty_type, road_type) %>% 
+  summarise(`2019` = n()) %>% 
+  ungroup() 
+
+c3 <- casualty_young %>% 
+  filter(accident_year == '2018') %>% 
+  group_by(road_type) %>%
+  select(casualty_type, road_type) %>% 
+  summarise(`2018` = n()) %>% 
+  ungroup() 
+
+road_type <- left_join(c1,c2, by = 'road_type') %>% left_join(c3, by = 'road_type')
+
+road_type %>% arrange(desc(`2020`))
+
+```
+
+```{r}
+#casualty_young %>% 
+#  group_by(road_type) %>%
+#  select(casualty_type, road_type) %>% 
+#  summarise(no_of_casualties = n()) %>% 
+#  ungroup() %>% 
+#  arrange(desc(no_of_casualties))
+
+```
+
+```{r}
+casualty_young %>% 
+  group_by(urban_or_rural_area) %>%
+  select(casualty_type, urban_or_rural_area) %>% 
+  summarise(no_of_casualties = n()) %>% 
+  ungroup() %>% 
+  arrange(desc(no_of_casualties))
+
+```
+
+```{r}
+casualty_young_cause <- casualty_young %>% 
+  filter(weather_conditions == 'Fine no high winds') %>% 
+  filter(light_conditions == 'Daylight') %>% 
+  filter(road_surface_conditions == 'Dry') %>% 
+  filter(road_type == 'Single carriageway')
+```
+
+```{r}
+ggplot(data = c,
+       aes(x = fct_infreq(pedestrian_crossing_physical_facilities))) +
+  geom_bar(position="dodge", fill = 'blue') +
+  facet_wrap(vars(accident_year.x)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Young people involved in accident classes with 200 or more casualties in 2020',
+       x = 'Pedestrian crossing physical facilities',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+
+```
+
+```{r}
+casualty_young_cause <- casualty_young_cause %>%
+  left_join(vehicles, by = 'accident_index')
+```
+
+```{r}
+ggplot(data = casualty_young_cause %>% 
+         filter(pedestrian_crossing_physical_facilities == 'No physical crossing facilities within 50 metres'),
+       aes(x = speed_limit)) +
+  geom_bar(position="dodge", fill = 'blue') +
+  facet_wrap(vars(casualty_type)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Young people involved in accident classes with 200 or more casualties in 2020',
+       x = 'Speed limits',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+
+```
+
+```{r}
+ggplot(data = casualty_young_cause %>% 
+         filter(pedestrian_crossing_physical_facilities == 'No physical crossing facilities within 50 metres'),
+       aes(x = junction_control)) +
+  geom_bar(position="dodge", fill = 'blue') +
+  facet_wrap(vars(casualty_type)) +
+  labs(title = 'Reported road casualties by road user type in Bradford, 2020',
+       subtitle = 'Young people involved in accident classes with 200 or more casualties in 2020',
+       x = 'Speed limits',
+       y = 'Number of accidents'
+  ) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  my_scale
+
+
+
+```
+
+```{r}
+table(casualty_young_cause$speed_limit)  
+
+```
 
 ```{r}
 #ggsave(path = here("study1", "figs", "bar_admissions_gender_dept.png"), 
