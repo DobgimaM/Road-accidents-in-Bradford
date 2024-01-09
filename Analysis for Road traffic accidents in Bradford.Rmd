@@ -32,13 +32,6 @@ setalloccol = data.table::setalloccol
 
 ## Road traffic accidents in Bradford
 
-**Task** The Director of Neighbourhoods wants to understand more about
-road traffic crashes in Bradford. You, the HDRC data scientist, have
-been asked to give some insight into road traffic crashes in Bradford.
-
-*Note* Availability of more specific dates rather than years would allow
-for calculation of rates
-
 Datasets
 
 ```{r}
